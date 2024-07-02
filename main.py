@@ -4,13 +4,13 @@ from tortoise.contrib.pydantic import pydantic_model_creator
 from models import User, Keeper, Product
 from auth import get_hashed_password
 
+app = FastAPI()
+
 # Pydantic models for serialization and validation
 User_Pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",))
 UserIn_Pydantic = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)
 UserOut_Pydantic = pydantic_model_creator(User, name="UserOut", exclude=("password",))
 Keeper_Pydantic = pydantic_model_creator(Keeper, name="Keeper")
-
-app = FastAPI()
 
 @app.get("/")
 async def root():

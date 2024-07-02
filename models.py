@@ -1,17 +1,13 @@
-from fastapi import FastAPI
-from tortoise.contrib.fastapi import register_tortoise
 from tortoise import fields, Tortoise
 from tortoise.models import Model
 from datetime import datetime
-from tortoise.contrib.pydantic import pydantic_model_creator
-from passlib.context import CryptContext
 
 # User model represents a user in the system
 class User(Model):
     id = fields.IntField(pk=True, index=True)  # Primary key
     username = fields.CharField(max_length=20, null=False, unique=True)  # Unique username
     email = fields.CharField(max_length=50, null=False, unique=True)  # Unique email
-    password = fields.CharField(max_length=50, null=False)  # Password
+    password = fields.CharField(max_length=128, null=False)  # Password
     is_verified = fields.BooleanField(default=False)  # Verification status
     join_date = fields.DatetimeField(default=datetime.utcnow)  # Join date
 
@@ -38,11 +34,4 @@ class Product(Model):
     owner = fields.ForeignKeyField("models.User", related_name="products")  # Foreign key to User
     image_url = fields.CharField(max_length=200, null=True, default="default.jpg")  # Image URL
     business = fields.ForeignKeyField("models.Keeper", related_name="products")  # Foreign key to Keeper
-
-# Pydantic models for serialization and validation
-user_pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",)) 
-user_pydanticIn = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)  
-user_pydanticOut = pydantic_model_creator(User, name="UserOut", exclude=("password",))  
-Keeper_pydantic = pydantic_model_creator(Keeper, name="Keeper")  
-
 
