@@ -15,5 +15,10 @@ async def very_token(token:str):
         """consists of user id"""
         payload = jwt.decode(token,config_credential['SECRET'])
         user = await User.get(id =payload.get("id"))# decode theuser  token
-    
-
+    except:
+        raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate":"NOT FOUND"}
+                )
+        return user
