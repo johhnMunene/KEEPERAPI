@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, HTTPException, Request, status
 from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
@@ -7,7 +6,7 @@ from auth import get_hashed_password
 from fastapi.logger import logger
 from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
-
+from email_sender import send_email  # Ensure you have email sending logic in this module
 # Signals
 from tortoise.signals import post_save
 from typing import List, Optional, Type
@@ -63,6 +62,10 @@ async def register_user(user: UserIn_Pydantic, request: Request):
     try:
         user_obj = await User.create(**user_info)
         new_user = await User_Pydantic.from_tortoise_orm(user_obj)
+
+        # Send confirmation email (make sure send_email is correctly implemented in email_sender.py)
+        await send_email(new_user.email)
+
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
