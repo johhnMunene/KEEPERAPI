@@ -1,3 +1,4 @@
+#respnse classes
 from fastapi import FastAPI, HTTPException, Request, status
 from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
@@ -12,6 +13,8 @@ from tortoise.signals import post_save
 from typing import List, Optional, Type
 from tortoise import BaseDBAsyncClient
 
+#template
+from fastapi.templating import jinja2Templates
 app = FastAPI()
 
 @post_save(User)
@@ -76,6 +79,8 @@ async def register_user(user: UserIn_Pydantic, request: Request):
         "status": "ok",
         "data": f"Hello {new_user.username}, thanks for using KEEPERAPI. Check your email to confirm your registration."
     }
+    templates = Jinja2Templates(directory="templates")
+
     @app.get('/verification',response_class = HTMLResponse)
 
     async def email_verification(request:Request,token:str):
@@ -84,7 +89,14 @@ async def register_user(user: UserIn_Pydantic, request: Request):
         if user and not user.is verified:
             user.is verified=True
             await user.save()
-            return
+            return templates.TemplateResponse("verification.html",
+                                              { "request":request,"username":user.username})
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate":"NOT FOUND"}
+                )
+
 
 register_tortoise(
     app,
