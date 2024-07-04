@@ -76,6 +76,15 @@ async def register_user(user: UserIn_Pydantic, request: Request):
         "status": "ok",
         "data": f"Hello {new_user.username}, thanks for using KEEPERAPI. Check your email to confirm your registration."
     }
+    @app.get('/verification',response_class = HTMLResponse)
+
+    async def email_verification(request:Request,token:str):
+        user=await very_token(token)
+
+        if user and not user.is verified:
+            user.is verified=True
+            await user.save()
+            return
 
 register_tortoise(
     app,
