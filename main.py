@@ -6,7 +6,7 @@ from auth import get_hashed_password
 from fastapi.logger import logger
 from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
-from email_sender import send_email  # Ensure you have email sending logic in this module
+from email_sender import send_email  # Updated import statement
 # Signals
 from tortoise.signals import post_save
 from typing import List, Optional, Type
