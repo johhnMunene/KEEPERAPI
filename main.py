@@ -1,5 +1,5 @@
-#respnse classes
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
 from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
 from models import User, Keeper, Product
@@ -7,15 +7,14 @@ from auth import get_hashed_password
 from fastapi.logger import logger
 from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
-from email_sender import send_email  # Updated import statement
-# Signals
+from email_sender import send_email
 from tortoise.signals import post_save
 from typing import List, Optional, Type
 from tortoise import BaseDBAsyncClient
+from fastapi.templating import Jinja2Templates
 
-#template
-from fastapi.templating import jinja2Templates
 app = FastAPI()
+templates = Jinja2Templates(directory="templates")
 
 @post_save(User)
 async def create_business(
@@ -26,7 +25,7 @@ async def create_business(
     update_fields: List[str]
 ) -> None:
     if created:
-        pass
+        await send_email([instance.email], instance)
 
 User_Pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",))
 UserIn_Pydantic = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)
@@ -66,8 +65,8 @@ async def register_user(user: UserIn_Pydantic, request: Request):
         user_obj = await User.create(**user_info)
         new_user = await User_Pydantic.from_tortoise_orm(user_obj)
 
-        # Send confirmation email (make sure send_email is correctly implemented in email_sender.py)
-        await send_email(new_user.email)
+        # Send confirmation email
+        await send_email([new_user.email], new_user)
 
     except IntegrityError:
         raise HTTPException(
@@ -79,24 +78,25 @@ async def register_user(user: UserIn_Pydantic, request: Request):
         "status": "ok",
         "data": f"Hello {new_user.username}, thanks for using KEEPERAPI. Check your email to confirm your registration."
     }
-    templates = Jinja2Templates(directory="templates")
 
-    @app.get('/verification',response_class = HTMLResponse)
+@app.get('/verification', response_class=HTMLResponse)
+async def email_verification(request: Request, token: str):
+    user = await verify_token(token)  # Ensure verify_token is correctly implemented
 
-    async def email_verification(request:Request,token:str):
-        user=await very_token(token)
+    if user and not user.is_verified:
+        user.is_verified = True
+        await user.save()
+        return templates.TemplateResponse("verification.html", {"request": request, "username": user.username})
 
-        if user and not user.is verified:
-            user.is verified=True
-            await user.save()
-            return templates.TemplateResponse("verification.html",
-                                              { "request":request,"username":user.username})
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-                headers={"WWW-Authenticate":"NOT FOUND"}
-                )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid token",
+        headers={"WWW-Authenticate": "NOT FOUND"}
+    )
 
+def verify_token(token: str) -> User:
+    # Mock verify_token function, replace with actual token verification logic
+    return User.get(id=1)  # Replace with actual logic
 
 register_tortoise(
     app,
