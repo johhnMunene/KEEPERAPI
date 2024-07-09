@@ -1,49 +1,75 @@
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
-from dotenv import dotenv_values
 from typing import List
+
+from models import User
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+from pydantic import EmailStr
 import jwt
-from pydantic import BaseModel, EmailStr
-from models import User  # Adjust the import as per your project structure
-from auth import *
-config_credentials = dotenv_values(".env")
+
+from con import get_settings
+
 
 conf = ConnectionConfig(
-    MAIL_USERNAME=config_credentials["EMAIL"],
-    MAIL_PASSWORD=config_credentials["PASS"],  # Use the correct keys
-    MAIL_FROM=config_credentials["EMAIL"],
-    MAIL_PORT=587,
-    MAIL_SERVER="smtp.gmail.com",
-    MAIL_STARTTLS=True,  # Use MAIL_STARTTLS instead of MAIL_TLS
-    MAIL_SSL_TLS=False,  # Use MAIL_SSL_TLS instead of MAIL_SSL
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True
+    MAIL_USERNAME=get_settings().MAIL_USERNAME,
+    MAIL_PASSWORD=get_settings().MAIL_PASSWORD,
+    MAIL_FROM=get_settings().MAIL_FROM,
+    MAIL_PORT=get_settings().MAIL_PORT,
+    MAIL_SERVER=get_settings().MAIL_SERVER,
+    MAIL_TLS=get_settings().MAIL_TLS,
+    MAIL_SSL=get_settings().MAIL_SSL,
+    USE_CREDENTIALS=get_settings().USE_CREDENTIALS,
+    VALIDATE_CERTS=get_settings().VALIDATE_CERTS
 )
 
-html = """
-<p>Thanks for using KeeperAPI</p>
-<h>Account Verification</h1>
-<br>
-<p>Click the button below to verify your account</p>
-<a href="http://localhost:8000/verification/?token={token}">Verify Account</a>
-"""
 
-class EmailSchema(BaseModel):
-    email: List[EmailStr]
+async def send_mail(email: List[EmailStr], instance: User):
+    """send Account Verification mail"""
 
-async def send_email(email: EmailSchema, instance: User):
     token_data = {
         "id": instance.id,
-        "username": instance.username
+        "username": instance.username,
+        "email": instance.email
     }
-    token = jwt.encode(token_data, config_credentials["SECRET"], algorithm="HS256")
+
+    token = jwt.encode(token_data, get_settings().SECRET, algorithm="HS256")
+
+    template = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+    </head>
+    <body>
+        <div style = "display:flex; align-items: center; flex-direction: column" >
+            <h3>Account Verification</H3>
+
+            <br>
+
+            <p>
+                Thanx for choosing us, please click on the button below
+                to verify your account
+            </p> 
+            
+            <a style = "display:marign-top: 1rem ; padding: 1rem; border-redius: 0.5rem;
+             font-size:1rem; text-decoration: no; background: #0275d8; color:white"
+             href="{SITE_URL}/verification/email/?token={token}">
+                Verify your email
+             </a>
+        </div>
+    </body>
+    </html>
+    """
+    # print(f"""
+
+    # your mail:
+    # {SITE_URL}verification/email/?token={token}
+
+    # """)
 
     message = MessageSchema(
-        subject="Keeper Account Verification Email",
-        recipients=email.email,
-        body=html.format(token=token),
+        subject=SITE_NAME + " account verification",
+        recipients=email,  # List of recipients,
+        body=template,
         subtype="html"
     )
-
     fm = FastMail(conf)
-    await fm.send_message(message=message)
-
+    await fm.send_message(message)
