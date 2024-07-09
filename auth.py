@@ -1,24 +1,32 @@
 from passlib.context import CryptContext
 import jwt
 from dotenv import dotenv_values
-from .models import User
-fro
-config credentials = dotenv_values("env")
+from fastapi import HTTPException, status
+from models import User
 
-pass_context = CryptContext(schemes = ['bcrypt'],deprecated='auto')
+config_credentials = dotenv_values(".env")
 
-def get_hashed_password(password):
+pass_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+def get_hashed_password(password: str) -> str:
     return pass_context.hash(password)
 
-async def very_token(token:str):
+async def verify_token(token: str):
     try:
-        """consists of user id"""
-        payload = jwt.decode(token,config_credential['SECRET'])
-        user = await User.get(id =payload.get("id"))# decode theuser  token
-    except:
-        raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-                headers={"WWW-Authenticate":"NOT FOUND"}
-                )
+        """Decode the token to get the user id."""
+        payload = jwt.decode(token, config_credentials['SECRET'], algorithms=["HS256"])
+        user = await User.get(id=payload.get("id"))  # Decode the user token
         return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+

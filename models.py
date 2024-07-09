@@ -1,4 +1,3 @@
-# models.py
 from tortoise import fields, Tortoise
 from tortoise.models import Model
 from datetime import datetime

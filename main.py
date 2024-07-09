@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
 from models import User, Keeper, Product
-from auth import get_hashed_password
+from auth import *
 from fastapi.logger import logger
 from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from tortoise.signals import post_save
 from typing import List, Optional, Type
 from tortoise import BaseDBAsyncClient
 from fastapi.templating import Jinja2Templates
+import uvicorn
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -94,9 +95,10 @@ async def email_verification(request: Request, token: str):
         headers={"WWW-Authenticate": "NOT FOUND"}
     )
 
-def verify_token(token: str) -> User:
-    # Mock verify_token function, replace with actual token verification logic
-    return User.get(id=1)  # Replace with actual logic
+async def verify_token(token: str) -> User:
+    # Implement token verification logic here
+    user = await User.get(id=1)  # Replace with actual logic to retrieve user based on token
+    return user
 
 register_tortoise(
     app,
@@ -107,6 +109,5 @@ register_tortoise(
 )
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
