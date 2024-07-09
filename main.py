@@ -1,9 +1,9 @@
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.responses import HTMLResponse
 from tortoise.contrib.fastapi import register_tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
 from models import User, Keeper, Product
-from auth import *
+from auth import get_hashed_password, token_generator, verify_token
 from fastapi.logger import logger
 from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
@@ -13,10 +13,56 @@ from typing import List, Optional, Type
 from tortoise import BaseDBAsyncClient
 from fastapi.templating import Jinja2Templates
 import uvicorn
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+
+# Pydantic models
+User_Pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",))
+UserIn_Pydantic = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)
+UserOut_Pydantic = pydantic_model_creator(User, name="UserOut", exclude=("password",))
+Keeper_Pydantic = pydantic_model_creator(Keeper, name="Keeper")
+
+# Token generation endpoint
+@app.post("/token")
+async def generate_token(request_form: OAuth2PasswordRequestForm = Depends()):
+    token = await token_generator(request_form.username, request_form.password)
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return {"access_token": token, "token_type": "bearer"}
+
+# Get current user from token
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    user = await verify_token(token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
+
+@app.get("/user/me")
+async def user_login(user: User_Pydantic = Depends(get_current_user)):
+    business = await Keeper.get(owner=user)
+    return {
+        "status": "ok",
+        "data": {
+            "username": user.username,
+            "email": user.email,
+            "verified": user.is_verified,
+            "joined_date": user.join_date.strftime("%d %d %Y")
+        }
+    }
+
+# Post-save signal to send email
 @post_save(User)
 async def create_business(
     sender: "Type[User]",
@@ -27,11 +73,6 @@ async def create_business(
 ) -> None:
     if created:
         await send_email([instance.email], instance)
-
-User_Pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified",))
-UserIn_Pydantic = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)
-UserOut_Pydantic = pydantic_model_creator(User, name="UserOut", exclude=("password",))
-Keeper_Pydantic = pydantic_model_creator(Keeper, name="Keeper")
 
 class RegistrationResponse(BaseModel):
     status: str
@@ -95,11 +136,7 @@ async def email_verification(request: Request, token: str):
         headers={"WWW-Authenticate": "NOT FOUND"}
     )
 
-async def verify_token(token: str) -> User:
-    # Implement token verification logic here
-    user = await User.get(id=1)  # Replace with actual logic to retrieve user based on token
-    return user
-
+# Register Tortoise ORM
 register_tortoise(
     app,
     db_url="sqlite://db.sqlite3",  # Use your actual database URL
@@ -108,6 +145,7 @@ register_tortoise(
     add_exception_handlers=True
 )
 
+# Start the application
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
