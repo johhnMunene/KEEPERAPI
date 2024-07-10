@@ -5,6 +5,7 @@ from dotenv import dotenv_values
 from fastapi import HTTPException, status
 from models import User
 
+from fastapi import FastAPI, Request
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 config_credentials = dotenv_values(".env")
 
 pass_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
 
 def get_hashed_password(password: str) -> str:
     return pass_context.hash(password)

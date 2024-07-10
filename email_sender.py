@@ -1,28 +1,26 @@
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+from dotenv import load_dotenv
+import jwt
+from pydantic import EmailStr
+from models import User  # Adjust the import as per your project structure
+import os
 from typing import List
 
-from models import User
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
-from pydantic import EmailStr
-import jwt
-
-from con import get_settings
-
+load_dotenv()  # Load environment variables from .env file
 
 conf = ConnectionConfig(
-    MAIL_USERNAME=get_settings().MAIL_USERNAME,
-    MAIL_PASSWORD=get_settings().MAIL_PASSWORD,
-    MAIL_FROM=get_settings().MAIL_FROM,
-    MAIL_PORT=get_settings().MAIL_PORT,
-    MAIL_SERVER=get_settings().MAIL_SERVER,
-    MAIL_TLS=get_settings().MAIL_TLS,
-    MAIL_SSL=get_settings().MAIL_SSL,
-    USE_CREDENTIALS=get_settings().USE_CREDENTIALS,
-    VALIDATE_CERTS=get_settings().VALIDATE_CERTS
+    MAIL_USERNAME=os.getenv("EMAIL"),
+    MAIL_PASSWORD=os.getenv("PASS"),
+    MAIL_FROM=os.getenv("EMAIL"),
+    MAIL_PORT=587,
+    MAIL_SERVER="smtp.gmail.com",  # Correct SMTP server for Gmail
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True
 )
-
-
 async def send_mail(email: List[EmailStr], instance: User):
-    """send Account Verification mail"""
+    """Send Account Verification email"""
 
     token_data = {
         "id": instance.id,
@@ -30,7 +28,7 @@ async def send_mail(email: List[EmailStr], instance: User):
         "email": instance.email
     }
 
-    token = jwt.encode(token_data, get_settings().SECRET, algorithm="HS256")
+    token = jwt.encode(token_data, config_credentials["SECRET"], algorithm="HS256")
 
     template = f"""
     <!DOCTYPE html>
@@ -39,37 +37,30 @@ async def send_mail(email: List[EmailStr], instance: User):
         <meta charset="UTF-8">
     </head>
     <body>
-        <div style = "display:flex; align-items: center; flex-direction: column" >
-            <h3>Account Verification</H3>
-
+        <div style="display: flex; align-items: center; flex-direction: column;">
+            <h3>Account Verification</h3>
             <br>
-
             <p>
-                Thanx for choosing us, please click on the button below
-                to verify your account
-            </p> 
-            
-            <a style = "display:marign-top: 1rem ; padding: 1rem; border-redius: 0.5rem;
-             font-size:1rem; text-decoration: no; background: #0275d8; color:white"
-             href="{SITE_URL}/verification/email/?token={token}">
+                Thank you for choosing {SITE_NAME}. Please click on the button below
+                to verify your account:
+            </p>
+            <a style="display: block; margin-top: 1rem; padding: 1rem; border-radius: 0.5rem;
+                      font-size: 1rem; text-decoration: none; background: #0275d8; color: white;"
+               href="{SITE_URL}/verification/email/?token={token}">
                 Verify your email
-             </a>
+            </a>
         </div>
     </body>
     </html>
     """
-    # print(f"""
-
-    # your mail:
-    # {SITE_URL}verification/email/?token={token}
-
-    # """)
 
     message = MessageSchema(
-        subject=SITE_NAME + " account verification",
-        recipients=email,  # List of recipients,
+        subject=f"{SITE_NAME} Account Verification",
+        recipients=email,
         body=template,
         subtype="html"
     )
+
     fm = FastMail(conf)
     await fm.send_message(message)
+
