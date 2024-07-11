@@ -19,6 +19,9 @@ User_Pydantic = pydantic_model_creator(User, name="User", exclude=("is_verified"
 UserIn_Pydantic = pydantic_model_creator(User, name="UserIn", exclude_readonly=True)
 UserOut_Pydantic = pydantic_model_creator(User, name="UserOut", exclude=("password",))
 Keeper_Pydantic = pydantic_model_creator(Keeper, name="Keeper")
+KeeperIn_Pydantic = pydantic_model_creator(Keeper, name="KeeperIn", exclude_readonly=True)
+Product_Pydantic = pydantic_model_creator(Product, name="Product")
+ProductIn_Pydantic = pydantic_model_creator(Product, name="ProductIn", exclude_readonly=True)
 
 # FastAPI application setup
 app = FastAPI(
@@ -95,8 +98,6 @@ async def user_registration(user: UserIn_Pydantic):
     user_new = await UserOut_Pydantic.from_tortoise_orm(user_obj)
     return user_new
 
-
-
 # Endpoint for email verification
 @app.get("/verification/email", response_class=HTMLResponse, tags=["User"])
 async def email_verification(request: Request, token: Optional[str] = None):
@@ -124,6 +125,111 @@ async def email_verification(request: Request, token: Optional[str] = None):
         headers={"WWW-Authenticate": "Bearer"}
     )
 
+# Token generation endpoint
+@app.post("/token", tags=["User"])
+async def generate_token(request_form: OAuth2PasswordRequestForm = Depends()):
+    token = await token_generator(request_form.username, request_form.password)
+    return {"access_token": token, "token_type": "bearer"}
+
+# Retrieve current user
+async def get_current_user(token: str = Depends(oauth_scheme)):
+    return await verify_token(token)
+
+# CRUD for User
+@app.post("/users/", tags=["User"], status_code=status.HTTP_201_CREATED, response_model=UserOut_Pydantic)
+async def create_user(user: UserIn_Pydantic):
+    user_info = user.dict(exclude_unset=True)
+    user_info["password"] = get_hashed_password(user_info["password"])
+    try:
+        user_obj = await User.create(**user_info)
+    except IntegrityError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create user. Check your data.")
+    await send_mail([user_info["email"]], user_obj, SITE_NAME, SITE_URL)
+    return await UserOut_Pydantic.from_tortoise_orm(user_obj)
+
+@app.get("/users/", tags=["User"], response_model=List[UserOut_Pydantic])
+async def read_users(skip: int = 0, limit: int = 10):
+    return await UserOut_Pydantic.from_queryset(User.all().offset(skip).limit(limit))
+
+@app.get("/users/{user_id}", tags=["User"], response_model=UserOut_Pydantic)
+async def read_user(user_id: int):
+    user = await UserOut_Pydantic.from_queryset_single(User.get(id=user_id))
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+@app.put("/users/{user_id}", tags=["User"], response_model=UserOut_Pydantic)
+async def update_user(user_id: int, user: UserIn_Pydantic):
+    await User.filter(id=user_id).update(**user.dict(exclude_unset=True))
+    return await UserOut_Pydantic.from_queryset_single(User.get(id=user_id))
+
+@app.delete("/users/{user_id}", tags=["User"], status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: int):
+    delete_count = await User.filter(id=user_id).delete()
+    if not delete_count:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return None
+
+# CRUD for Keeper
+@app.post("/keepers/", tags=["Keeper"], status_code=status.HTTP_201_CREATED, response_model=Keeper_Pydantic)
+async def create_keeper(keeper: KeeperIn_Pydantic, user: User = Depends(get_current_user)):
+    keeper_info = keeper.dict(exclude_unset=True)
+    keeper_info["owner_id"] = user.id
+    keeper_obj = await Keeper.create(**keeper_info)
+    return await Keeper_Pydantic.from_tortoise_orm(keeper_obj)
+
+@app.get("/keepers/", tags=["Keeper"], response_model=List[Keeper_Pydantic])
+async def read_keepers(skip: int = 0, limit: int = 10):
+    return await Keeper_Pydantic.from_queryset(Keeper.all().offset(skip).limit(limit))
+
+@app.get("/keepers/{keeper_id}", tags=["Keeper"], response_model=Keeper_Pydantic)
+async def read_keeper(keeper_id: int):
+    keeper = await Keeper_Pydantic.from_queryset_single(Keeper.get(id=keeper_id))
+    if not keeper:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keeper not found")
+    return keeper
+
+@app.put("/keepers/{keeper_id}", tags=["Keeper"], response_model=Keeper_Pydantic)
+async def update_keeper(keeper_id: int, keeper: KeeperIn_Pydantic):
+    await Keeper.filter(id=keeper_id).update(**keeper.dict(exclude_unset=True))
+    return await Keeper_Pydantic.from_queryset_single(Keeper.get(id=keeper_id))
+
+@app.delete("/keepers/{keeper_id}", tags=["Keeper"], status_code=status.HTTP_204_NO_CONTENT)
+async def delete_keeper(keeper_id: int):
+    delete_count = await Keeper.filter(id=keeper_id).delete()
+    if not delete_count:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keeper not found")
+    return None
+
+# CRUD for Product
+@app.post("/products/", tags=["Product"], status_code=status.HTTP_201_CREATED, response_model=Product_Pydantic)
+async def create_product(product: ProductIn_Pydantic):
+    product_obj = await Product.create(**product.dict(exclude_unset=True))
+    return await Product_Pydantic.from_tortoise_orm(product_obj)
+
+@app.get("/products/", tags=["Product"], response_model=List[Product_Pydantic])
+async def read_products(skip: int = 0, limit: int = 10):
+    return await Product_Pydantic.from_queryset(Product.all().offset(skip).limit(limit))
+
+@app.get("/products/{product_id}", tags=["Product"], response_model=Product_Pydantic)
+async def read_product(product_id: int):
+    product = await Product_Pydantic.from_queryset_single(Product.get(id=product_id))
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    return product
+
+@app.put("/products/{product_id}", tags=["Product"], response_model=Product_Pydantic)
+async def update_product(product_id: int, product: ProductIn_Pydantic):
+    await Product.filter(id=product_id).update(**product.dict(exclude_unset=True))
+    return await Product_Pydantic.from_queryset_single(Product.get(id=product_id))
+
+@app.delete("/products/{product_id}", tags=["Product"], status_code=status.HTTP_204_NO_CONTENT)
+async def delete_product(product_id: int):
+    delete_count = await Product.filter(id=product_id).delete()
+    if not delete_count:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    return None
+
 # Register Tortoise ORM with FastAPI
 register_tortoise(
     app,
@@ -135,4 +241,3 @@ register_tortoise(
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
